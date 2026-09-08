@@ -24,9 +24,10 @@ const float GRAVITY = 0.3f;
 const float JUMP_SPEED = -5.0f;  // (set velocity of bird in the Y direction upon jump)
 const float TUBE_SPEED = 3.0f;
 
-// TODO: (Q1)
-//  Initial Bird Attributes
-//  Initialize the global (constant) variables for it here (radius, position, color)
+// Bird attributes
+const sf::Vector2f INITIAL_BIRD_POSITION = {100.0f, 400.0f};
+const float INITIAL_BIRD_RADIUS = 15.0f;
+const sf::Color INITIAL_BIRD_COLOR = sf::Color::Yellow;  
 
 // ResourceManager just owns all the resources/assets you'd want in your game.
 // In an engine, you'd probably want to make this more flexible than what we have here
@@ -67,20 +68,13 @@ struct TubePair {
 bool isTubeOffScreen(const TubePair& tube) { return tube.isOffScreen(); }
 
 struct BirdState {
-    BirdState() : velocityY{INITIAL_BIRD_VELOCITY_Y} {
-        // ====== ====== ======
-        // TODO: (Q1)
-        //  - initialize the bird's shape (see below) to have
-        //    appropriate size, color, and initial position.
-        //  Note: consider using member initializer list to set the radius via ctor call.
-        // ====== ====== ======
+    BirdState() : velocityY{INITIAL_BIRD_VELOCITY_Y}, shape{INITIAL_BIRD_RADIUS} {
+        shape.setFillColor(INITIAL_BIRD_COLOR);
+        shape.setPosition(INITIAL_BIRD_POSITION);
     }
 
-    // ====== ====== ======
-    // TODO: (Q1)
-    //  - add a field for the bird's shape.
-    // ====== ====== ======
     float velocityY;
+    sf::CircleShape shape;
 };
 
 struct GameState {
@@ -115,19 +109,26 @@ private:
         bird.velocityY += GRAVITY;
 
         // ====== ====== ======
-        // TODO: (Q3)
+        // (Q3)
         //  - Update bird position according to the rule that bird's y-position
         //    should have bird's y-velocity added to it every frame (assume dt = 1).
         //    Should be equivalent to: bird.positionY += bird.velocityY;
         //  - Note: bird's x-coordinate will alway be exactly 100.f
         // ====== ====== ======
+        sf::Vector2f newPosition = bird.shape.getPosition() + sf::Vector2f(0, bird.velocityY);
+        bird.shape.setPosition(newPosition);
 
         // ====== ====== ======
-        // TODO: (Q3)
+        // (Q3)
         //  - Check if the bird has exceeded the bounds of the screen
         //    (i.e., if it's no longer visible). If not, game should reset by clearing
         //    the tubes and restarting the game (setting the bird back to original initial position)
         // ====== ====== ======
+        if ((newPosition.y + bird.shape.getRadius()) > WINDOW_HEIGHT || (newPosition.y - bird.shape.getRadius()) < 0) {
+            resetTubes();
+            bird.shape.setPosition(INITIAL_BIRD_POSITION);
+            bird.velocityY = INITIAL_BIRD_VELOCITY_Y;
+        }
     }
 
     void updateTubes() {
@@ -151,19 +152,27 @@ private:
 
     void checkCollisions() {
         // ====== ====== ======
-        // TODO: (Q4)
+        //  (Q4)
         //  Check for bird-tube collision using SFML Rect methods: getGlobalBounds() and
         //  findIntersection(). getGlobalBounds() will return a bounding box for the bird
         //  findIntersection() returns an sf::optional<sf::Rect>  (which can be
         //  implicitly converted to a boolean value) depending on whether a rectangle intersects
         //  with another
         // ====== ====== ======
+        for (const auto& tube : tubes) {
+            if (bird.shape.getGlobalBounds().findIntersection(tube.topTube.getGlobalBounds()) ||
+                bird.shape.getGlobalBounds().findIntersection(tube.bottomTube.getGlobalBounds())) {
+                // ====== ====== ======
+                // (Q4)
+                //  If bird hits tube, game should reset by resetting the tubes and resetting the bird
+                //  to its initial state (i.e., restarting the game)
+                // ====== ====== ======
+                resetTubes();
+                bird.shape.setPosition(INITIAL_BIRD_POSITION);
+                bird.velocityY = INITIAL_BIRD_VELOCITY_Y;
+            }
+        }
 
-        // ====== ====== ======
-        // TODO: (Q4)
-        //  If bird hits tube, game should reset by resetting the tubes and resetting the bird
-        //  to its initial state (i.e., restarting the game)
-        // ====== ====== ======
     }
 
 public:
@@ -183,10 +192,18 @@ void handleInput(sf::Window& window, GameState& gameState, const ResourceManager
             shouldQuit = true;
         }
 
-        // ====== ====== ======
-        // TODO: (Q2)
-        //  implement jump logic (the key press should be space) and play jump sound fx
-        // ====== ====== ======
+        // Jump logic and play jump sound fx
+        else if (const sf::Event::KeyPressed* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
+            if (keyPressed->scancode == sf::Keyboard::Scan::Space) {
+                gameState.bird.velocityY = JUMP_SPEED;
+                if (resources.jumpSound) {
+                    resources.jumpSound->play();
+                }
+            } else if (keyPressed->scancode == sf::Keyboard::Scan::Escape) {
+                window.close();
+                shouldQuit = true;
+            }
+        }
     }
 }
 
@@ -198,9 +215,8 @@ void render(sf::RenderWindow& window, const GameState& gameState) {
         window.draw(tube.topTube);
         window.draw(tube.bottomTube);
     }
-    // ====== ====== ======
-    // TODO: (Q1) Draw bird
-    // ====== ====== ======
+    // Draw bird
+    window.draw(gameState.bird.shape);
     window.display();
 }
 
@@ -217,10 +233,16 @@ int main() {
         window.setKeyRepeatEnabled(false);
 
         // ====== ====== ======
-        // TODO: (Q2)
+        // (Q2)
         //  - load jump sound into resources.jumpSoundBuffer
         //      - if fails, print to stderr: "Warning: Could not load jump.wav"
         //  - initialize an sf::Sound from resources.jumpSoundBuffer in resources.jumpSound
+        resources.jumpSoundBuffer.reset(new sf::SoundBuffer());
+        if (!resources.jumpSoundBuffer->loadFromFile("assets/jump.wav")) {
+            std::cerr << "Warning: Could not load jump.wav" << std::endl;
+        } else {
+            resources.jumpSound.reset(new sf::Sound(*resources.jumpSoundBuffer));
+        }
         // ====== ====== ======
         //  Note that a std::unique_ptr<T> is just a holder of a T* that automatically calls
         //  delete for you on the T* when it goes out of scope.
